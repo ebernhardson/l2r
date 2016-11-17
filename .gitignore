@@ -1,0 +1,15 @@
+# random storage directories
+/data
+/features
+/log
+/tmp
+
+# virtualenv
+/bin
+/include
+/lib
+/local
+
+# stuff
+.*.sw?
+*.pyc

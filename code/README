@@ -1,0 +1,27 @@
+
+# NOTE: PyTable will regularly complain about possible performance problems
+# because we are using utf8 and it only supports ascii. To work around this
+# it uses pickle (python serialization) to turn the unicode into something
+# it can store. Should consider if a different storage format will be better.
+
+#Run scripts in following order:
+
+# Fetch initial click data from hive
+python data_prepare.py
+
+# Fetch documents from elasticsearch for all referenced page ids
+python data_augment_es_docs.py
+# Fetch term vectors from elasticsearch for all referenced page ids
+python data_augment_es_docs_termvec.py
+# Fetch term vectors from elasticsearch for all referenced query strings
+python data_augment_es_query_termvec.py
+# TODO: train DBN from click data and spit out a relevance dataframe
+python data_augment_relevance.py
+
+# TODO: Merge all the data from es and the DBN into a combined 'all' dataframe
+python data_merge_es.py
+
+# TODO: extract features from 'all' dataframe
+
+# TODO: train model from features
+
