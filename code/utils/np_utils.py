@@ -18,11 +18,9 @@ def _mean(x):
 def _corr(x, y_train):
     if _dim(x) == 1:
         corr = pearsonr(x.flatten(), y_train)[0]
-        if str(corr) == "nan":
-            corr = 0.
     else:
         # Why?
-        corr = 1.
+        corr = np.nan
     return corr
 
 def _dim(x):

@@ -14,14 +14,16 @@ from utils import table_utils
 
 def main():
     df = table_utils._read(config.CLICK_DATA)
-    # TODO: using search_id might be more efficient, but (query, identity)
+    # TODO: using only session_id might be more efficient, but (query, session_id)
     # is more obvious to debug
-    grouped = df.groupby(['query', 'identity'])
+    grouped = df.groupby(['norm_query', 'session_id'])
     clickmodel_data_file = os.path.join(config.TMP_DIR, 'clickmodel.txt')
     pos = 0
     with codecs.open(clickmodel_data_file, 'w', 'utf8') as f:
         with progressbar.ProgressBar() as bar:
-            for (query, identity), group in bar(grouped):
+            for (norm_query, session_id), group in bar(grouped):
+                assert "\t" not in norm_query
+                assert type(norm_query) == unicode
                 results = []
                 clicks = []
                 # TODO: groupby still necessary? check all group lengths, they might be 1
@@ -41,11 +43,9 @@ def main():
                 # exclude too small result sets as well
                 if len(results) < config.DBN_CONFIG['MIN_DOCS_PER_QUERY']:
                     continue
-                assert "\t" not in query
-                assert type(query) == unicode
                 f.write("\t".join([
                     str(pos), # hash digest
-                    query, # query
+                    norm_query, # query
                     '0', # region
                     '0', # intent weight
                     json.dumps(results), # urls
@@ -80,22 +80,22 @@ def main():
                 bar.update(pos)
                 pos += 1
 
-                _, query, _, _, titles, _, clicks = line.rstrip().split('\t')
+                _, norm_query, _, _, titles, _, clicks = line.rstrip().split('\t')
                 titles = json.loads(titles)
                 if len(titles) < dbn_config['MIN_DOCS_PER_QUERY']:
                     continue
-                query_id = reader.query_to_id[(query, "0")]
+                query_id = reader.query_to_id[(norm_query, "0")]
                 title_ids = [reader.url_to_id[t] for t in titles]
                 session = SessionItem(0, query_id, title_ids, 0, [], {})
                 relevances = model.get_model_relevances(session)
                 for title, relevance in zip(titles, relevances):
-                    if (query, title) in seen:
+                    if (norm_query, title) in seen:
                         continue
-                    results.append([query, title, relevance])
+                    results.append([norm_query, title, relevance])
                     # alternatly could use drop_duplicates, not sure which
                     # is cheaper on memory usage
-                    seen.add((query, title))
-        df = pd.DataFrame(results, columns=['query', 'hit_title', 'relevance'])
+                    seen.add((norm_query, title))
+        df = pd.DataFrame(results, columns=['norm_query', 'hit_title', 'relevance'])
         print 'Hits with relevance: %d' % (len(results))
         table_utils._write(config.RELEVANCE_DATA, df)
 

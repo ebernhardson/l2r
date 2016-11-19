@@ -3,11 +3,11 @@ from utils import os_utils
 # Top level configuration
 TASK = "all"
 
-ES_URL = 'http://localhost:9200/enwiki_content'
+ES_URL = 'http://elastic1020.eqiad.wmnet:9200/enwiki_content'
 
 # query options for the source data
 # Number of times the query must have been issued in 1 week
-MIN_NUM_SEARCHES = 10
+MIN_NUM_SEARCHES = 35
 # Project searched against
 WIKI_PROJECT = 'en.wikipedia'
 # The number of unique queries to source
@@ -68,8 +68,8 @@ DBN_CONFIG = {
     'DEBUG': False,
     'PRETTY_LOG': True,
     'MIN_DOCS_PER_QUERY': 10,
-    'MAX_DOCS_PER_QUERY': 20,
-    'SERP_SIZE': 20,
+    'MAX_DOCS_PER_QUERY': 10,
+    'SERP_SIZE': 10,
     'QUERY_INDEPENDENT_PAGER': False,
     'DEFAULT_REL': 0.5
 }

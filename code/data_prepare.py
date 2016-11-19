@@ -15,80 +15,88 @@ def main():
     # Attempting to select all clicks for a limited number of queries makes
     # this rather complicated...but simpler than doing the top few sub-queries
     # in pandas
-    
+
     sql = """
 SELECT
-    query,
-    identity,
-    search_id,
-    -- group contains multiple searches (forward, read, back navigation, or pagination)
-    -- so this collects potentially multiple click's and checks if any were this hit
-    ARRAY_CONTAINS(COLLECT_LIST(click_page_id), hit.pageid) AS clicked,
-    -- Some things can have the same score, so this isn't the same order we displayed, should
-    -- add to CirrusSearchRequestSet to know the real hit position
-    ROW_NUMBER() OVER(PARTITION BY query, identity ORDER BY -MAX(hit.score)) AS hit_position,
-    hit.title AS hit_title,
+    z.query AS query,
+    z.norm_query AS norm_query,
+    z.session_id AS session_id,
     hit.pageid AS hit_page_id,
+    hit.title AS hit_title,
+    -- Some things can have the same score, so this isn't the same order we displayed, should
+    -- add to CirrusSearchRequestSet to know the real hit position, or find the right hive solution
+    ROW_NUMBER() OVER(PARTITION BY z.query, z.session_id ORDER BY -AVG(hit.score)) AS hit_position,
     -- If the user performed the query multiple times (forward, read, back navigation) the
     -- scores could be slightly different, just take a reasonable one they are probably
-    -- close anyways. Could AVG() i suppose?
-    MAX(hit.score) AS hit_score
+    -- close anyways.
+    AVG(hit.score) AS hit_score,
+    -- group contains multiple searches (forward, read, back navigation, or pagination)
+    -- so this collects potentially multiple click's and checks if any were this hit
+    ARRAY_CONTAINS(COLLECT_LIST(z.click_page_id), hit.pageid) AS clicked
 FROM (
     SELECT
-        query,
-        identity,
-        search_id,
-        click.page_id AS click_page_id,
-        click.hits AS hits
-    FROM (
+        top_query_clicks.query,
+        top_query_clicks.norm_query,
+        top_query_clicks.click_page_id,
+        top_query_clicks.search_timestamp,
+        top_query_clicks.click_timestamp,
+        top_query_clicks.hits,
+        top_query_clicks.session_id
+    FROM
+        ebernhardson.top_query_clicks
+    JOIN (
+            -- Randomly select N unique normalized queries
         SELECT
-            query,
-            meta.identity AS identity,
-            -- This assigns a single search_id to a (query, identity) pair, may not be
-            -- necessary but seemed plausibly useful
-            ROW_NUMBER() OVER () as search_id,
-            COLLECT_LIST(NAMED_STRUCT('page_id', meta.page_id, 'hits', meta.hits)) AS clicks
+            x.project, x.norm_query
         FROM (
             SELECT
-                query,
-                -- Collects all searches by all users to one query
-                COLLECT_LIST(NAMED_STRUCT('identity', identity, 'page_id', page_id, 'hits', hits)) AS collected
+                project,
+                norm_query,
+                count(distinct year, month, day, session_id) as num_searchs
             FROM
                 ebernhardson.top_query_clicks
             WHERE
-                num_searches > %d
+                year = 2016
                 AND project = '%s'
             GROUP BY
-                query
-            ORDER BY
-                RAND()
-            LIMIT %d
+                project,
+                norm_query
             ) x
-        LATERAL VIEW
-            EXPLODE(collected) m AS meta
-        GROUP BY
-            query,
-            meta.identity
+        WHERE
+            x.num_searchs >= %d
+        DISTRIBUTE BY
+            rand()
+        SORT BY
+            rand()
+        LIMIT
+            %d
         ) y
-    LATERAL VIEW
-        EXPLODE(clicks) c AS click
+    ON
+        y.norm_query = top_query_clicks.norm_query
+        AND y.project = top_query_clicks.project
+    WHERE
+        year = 2016
     ) z
 LATERAL VIEW
-    EXPLODE(hits) h AS hit
+    -- ideally we want to know the order within hits, as this is the display
+    -- order, but how?
+    EXPLODE(z.hits) h AS hit
 GROUP BY
-    search_id,
-    query,
-    identity,
+    z.query,
+    z.norm_query,
+    z.session_id,
     hit.pageid,
     hit.title
 ;
-""" % (config.MIN_NUM_SEARCHES, config.WIKI_PROJECT, config.MAX_QUERIES)
+""" % (config.WIKI_PROJECT, config.MIN_NUM_SEARCHES, config.MAX_QUERIES)
 
     if not os.path.isfile(config.CLICK_DATA_TSV):
         with tempfile.TemporaryFile() as tmp:
-            p = subprocess.Popen(['ssh', '-o', 'Compression=yes', 'stat1002.eqiad.wmnet',
-                                  'hive', '-S', '-e', '"' + sql + '"'],
-                                 stdin=subprocess.PIPE, stdout=tmp, stderr=subprocess.PIPE)
+            command = []
+            if False:
+                command += ['ssh', '-o', 'Compression=yes', 'stat1002.eqiad.wmnet']
+            command += ['hive', '-S', '-e', '"' + sql + '"']
+            p = subprocess.Popen(command, stdin=None, stdout=tmp, stderr=subprocess.PIPE)
             _, stderr = p.communicate(input=sql)
             if not os.fstat(tmp.fileno()).st_size > 0:
                 print stderr
@@ -103,7 +111,7 @@ GROUP BY
 
     # Read the tsv into pandas
     df = pd.read_csv(config.CLICK_DATA_TSV, sep="\t", index_col=False, encoding="utf-8")
-    
+
     # and write it back out as hdf5
     table_utils._write(config.CLICK_DATA, df)
 
