@@ -5,7 +5,10 @@ from collections import Counter
 
 import sys
 import math
+from difflib import SequenceMatcher
+import Levenshtein
 
+from utils import np_utils
 sys.path.append("..")
 import config
 
@@ -35,3 +38,28 @@ def _es_cosine_sim(a, b):
         return float(numerator) / denominator
     else:
         return 0.0
+
+def _edit_dist(str1, str2):
+    try:
+        # very fast
+        # http://stackoverflow.com/questions/14260126/how-python-levenshtein-ratio-is-computed
+        # d = Levenshtein.ratio(str1, str2)
+        d = Levenshtein.distance(str1, str2)/float(max(len(str1),len(str2)))
+    except:
+        # https://docs.python.org/2/library/difflib.html
+        d = 1. - SequenceMatcher(lambda x: x==" ", str1, str2).ratio()
+    return d
+
+def _jaccard_coef(A, B):
+    if not isinstance(A, set):
+        A = set(A)
+    if not isinstance(B, set):
+        B = set(B)
+    return np_utils._try_divide(float(len(A.intersection(B))), len(A.union(B)))
+
+def _dice_dist(A, B):
+    if not isinstance(A, set):
+        A = set(A)
+    if not isinstance(B, set):
+        B = set(B)
+    return np_utils._try_divide(2.*float(len(A.intersection(B))), (len(A) + len(B)))

@@ -103,7 +103,7 @@ class StandaloneFeatureWrapper(object):
 # wrapper for generating pairwise feature, e.g.,
 # intersect count of words between query and page title
 class PairwiseFeatureWrapper(object):
-    def __init__(self, generator, dfAll, obs_fields, target_fields, param_list, feat_dir, logger):
+    def __init__(self, generator, dfAll, obs_fields, target_fields, param_list, feat_dir, logger, deduplicate=False):
         self.generator = generator
         self.dfAll = dfAll
         self.obs_fields = obs_fields
@@ -111,34 +111,35 @@ class PairwiseFeatureWrapper(object):
         self.param_list = param_list
         self.feat_dir = feat_dir
         self.logger = logger
-
-    def _has_fields(self, fields):
-        if isinstance(fields, str) or isinstance(fields, unicode):
-            if not fields in self.dfAll.columns:
-                self.logger.info("Skip %s" %(fields))
-                return False
-        elif isinstance(fields, list):
-            for f in fields:
-                if not f in self.dfAll.columns:
-                    self.logger.info("Skip %s" % (','.join(fields)))
-                    return False
-        else:
-            self.logger.info("Skip unknown type: %s" % (type(fields)))
-            return False
-        return True
+        self.deduplicate = deduplicate
 
     def go(self):
         y_train = self.dfAll['relevance'].values
         for obs_field in self.obs_fields:
-            if not self._has_fields(obs_field):
+            if not obs_field in self.dfAll.columns:
+                self.logger.info("Skip %s" % (obs_field))
                 continue
-            obs_corpus = self.dfAll[obs_field].values
+            if not self.deduplicate:
+                obs_corpus = self.dfAll[obs_field].values
             for target_field in self.target_fields:
-                if not self._has_fields(target_field):
+                if not target_field in self.dfAll.columns:
+                    self.logger.info("Skip %s" % (target_field))
                     continue
-                target_corpus = self.dfAll[target_field].values
+                if self.deduplicate:
+                    combined_corpus = self.dfAll[[obs_field, target_field]].drop_duplicates().values
+                    obs_corpus = combined_corpus[:,0]
+                    target_corpus = combined_corpus[:,1]
+                else:
+                    target_corpus = self.dfAll[target_field].values
                 estimator = self.generator(obs_corpus, target_corpus, *self.param_list)
                 x = estimator.transform()
+                if self.deduplicate:
+                    x_df = pd.DataFrame(zip(obs_corpus, target_corpus, x), columns=['src1', 'src2', 'est']).set_index(['src1', 'src2'])
+                    x = self.dfAll[[obs_field, target_field]].join(x_df, on=[obs_field, target_field], how='left')['est'].values
+                    # This feels like a hack, but we have ended up with an ndarray of ndarray on
+                    # aggregations and need to fix it
+                    if type(x[0]) == np.ndarray:
+                        x = np.vstack(x)
                 if isinstance(estimator.__name__(), list):
                     for i, feat_name in enumerate(estimator.__name__()):
                         dim = 1
