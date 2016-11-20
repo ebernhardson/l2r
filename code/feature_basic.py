@@ -7,7 +7,7 @@ import re
 import config
 from utils import ngram_utils, np_utils, nlp_utils
 from utils import time_utils, logging_utils, table_utils
-from feature_base import BaseEstimator, StandaloneFeatureWrapper
+from feature_base import BaseEstimator, StandaloneFeatureWrapper, MultiObjEstimatorWrapper
 
 # tune the token pattern to get better correlation, although
 # this also varies by language...
@@ -19,20 +19,10 @@ class DocLen(BaseEstimator):
         super(DocLen, self).__init__(obs_corpus, target_corpus, aggregation_mode)
 
     def __name__(self):
-        if len(self.aggregation_mode) > 1:
-            return ["DocLen_%s" % (x) for x in self.aggregation_mode]
-        else:
-            return "DocLen"
+        return "DocLen"
 
     def transform_one(self, obs, target, id):
-        is_agg = len(self.aggregation_mode) > 1
-        if is_agg:
-            assert isinstance(obs, tuple)
-            obs_list = obs
-        else:
-            obs_list = [obs]
-        res = [len(nlp_utils._tokenize(x, token_pattern)) for x in obs_list]
-        return res if is_agg else res[0]
+        return len(nlp_utils._tokenize(obs, token_pattern))
 
 class DocFreq(BaseEstimator):
     """Frequency of the document in the corpus"""
@@ -44,20 +34,10 @@ class DocFreq(BaseEstimator):
             self.counter = Counter(obs_corpus)
 
     def __name__(self):
-        if len(self.aggregation_mode) > 1:
-            return ["DocFreq_%s" % (x) for x in self.aggregation_mode]
-        else:
-            return "DocFreq"
+        return "DocFreq"
 
     def transform_one(self, obs, target, id):
-        is_agg = len(self.aggregation_mode) > 1
-        if is_agg:
-            assert isinstance(obs, tuple)
-            obs_list = obs
-        else:
-            obs_list = [obs]
-        res = [self.counter[x] for x in obs_list]
-        return res if is_agg else res[0]
+        return self.counter[obs]
 
 class DocEntropy(BaseEstimator):
     """Entropy of the document"""
@@ -65,26 +45,14 @@ class DocEntropy(BaseEstimator):
         super(DocEntropy, self).__init__(obs_corpus, target_corpus, aggregation_mode)
 
     def __name__(self):
-        if len(self.aggregation_mode) > 1:
-            return ["DocEntropy_%s" % (x) for x in self.aggregation_mode]
-        else:
-            return "DocEntropy"
+        return "DocEntropy"
 
     def transform_one(self, obs, target, id):
-        is_agg = len(self.aggregation_mode) > 1
-        if is_agg:
-            assert isinstance(obs, tuple)
-            obs_list = obs
-        else:
-            obs_list = [obs]
-        res = []
-        for one_obs in obs_list:
-            obs_tokens = nlp_utils._tokenize(one_obs, token_pattern)
-            counter = Counter(obs_tokens)
-            count = np.asarray(list(counter.values()))
-            proba = count / float(np.sum(count))
-            res.append(np_utils._entropy(proba))
-        return res if is_agg else res[0]
+        obs_tokens = nlp_utils._tokenize(obs, token_pattern)
+        counter = Counter(obs_tokens)
+        count = np.asarray(list(counter.values()))
+        proba = count / float(np.sum(count))
+        return np_utils._entropy(proba)
 
 class DigitCount(BaseEstimator):
     """Count of digits in the document"""
@@ -92,44 +60,22 @@ class DigitCount(BaseEstimator):
         super(DigitCount, self).__init__(obs_corpus, target_corpus, aggregation_mode)
 
     def __name__(self):
-        if len(self.aggregation_mode) > 1:
-            return ["DigitCount_%s" % (x) for x in self.aggregation_mode]
-        else:
-            return "DigitCount"
+        return "DigitCount"
 
     def transform_one(self, obs, target, id):
-        is_agg = len(self.aggregation_mode) > 1
-        if is_agg:
-            assert isinstance(obs, tuple)
-            obs_list = obs
-        else:
-            obs_list = [obs]
-        res = [len(re.findall(r"\d", x)) for x in obs_list]
-        return res if is_agg else res[0]
+        return len(re.findall(r"\d", obs))
 
 class DigitRatio(BaseEstimator):
     def __init__(self, obs_corpus, target_corpus, aggregation_mode=""):
         super(DigitRatio, self).__init__(obs_corpus, target_corpus, aggregation_mode)
 
     def __name__(self):
-        if len(self.aggregation_mode) > 1:
-            return ["DigitRatio_%s" % (x) for x in self.aggregation_mode]
-        else:
-            return "DigitRatio"
+        return "DigitRatio"
 
     def transform_one(self, obs, target, id):
-        is_agg = len(self.aggregation_mode) > 1
-        if is_agg:
-            assert isinstance(obs, tuple)
-            obs_list = obs
-        else:
-            obs_list = [obs]
-        res = []
-        for one_obs in obs_list:
-            obs_tokens = nlp_utils._tokenize(one_obs, token_pattern)
-            digits = re.findall(r"\d", one_obs)
-            res.append(np_utils._try_divide(len(digits), len(obs_tokens)))
-        return res if is_agg else res[0]
+        obs_tokens = nlp_utils._tokenize(obs, token_pattern)
+        digits = re.findall(r"\d", obs)
+        return np_utils._try_divide(len(digits), len(obs_tokens))
 
 class UniqueCount_Ngram(BaseEstimator):
     def __init__(self, obs_corpus, target_corpus, ngram, aggregation_mode=""):
@@ -138,25 +84,12 @@ class UniqueCount_Ngram(BaseEstimator):
         self.ngram_str = ngram_utils._ngram_str_map[self.ngram]
 
     def __name__(self):
-        name = "UniqueCount_%s" % (self.ngram_str)
-        if len(self.aggregation_mode) > 1:
-            return ["%s_%s" % (name, x) for x in self.aggregation_mode]
-        else:
-            return name
+        return "UniqueCount_%s" % (self.ngram_str)
 
     def transform_one(self, obs, target, id):
-        is_agg = len(self.aggregation_mode) > 1
-        if is_agg:
-            assert isinstance(obs, tuple)
-            obs_list = obs
-        else:
-            obs_list = [obs]
-        res = []
-        for one_obs in obs_list:
-            obs_tokens = nlp_utils._tokenize(one_obs, token_pattern)
-            obs_ngrams = ngram_utils._ngrams(obs_tokens, self.ngram)
-            res.append(len(set(obs_ngrams)))
-        return res if is_agg else res[0]
+        obs_tokens = nlp_utils._tokenize(obs, token_pattern)
+        obs_ngrams = ngram_utils._ngrams(obs_tokens, self.ngram)
+        return len(set(obs_ngrams))
 
 class UniqueRatio_Ngram(BaseEstimator):
     def __init__(self, obs_corpus, target_corpus, ngram, aggregation_mode=""):
@@ -165,34 +98,17 @@ class UniqueRatio_Ngram(BaseEstimator):
         self.ngram_str = ngram_utils._ngram_str_map[self.ngram]
 
     def __name__(self):
-        name = "UniqueRatio_%s" % (self.ngram_str)
-        if len(self.aggregation_mode) > 1:
-            return ["%s_%s" % (name, x) for x in self.aggregation_mode]
-        else:
-            return name
+        return "UniqueRatio_%s" % (self.ngram_str)
 
     def transform_one(self, obs, target, id):
-        is_agg = len(self.aggregation_mode) > 1
-        if is_agg:
-            assert isinstance(obs, tuple)
-            obs_list = obs
-        else:
-            obs_list = [obs]
-        res = []
-        for one_obs in obs_list:
-            obs_tokens = nlp_utils._tokenize(one_obs, token_pattern)
-            obs_ngrams = ngram_utils._ngrams(obs_tokens, self.ngram)
-            res.append(np_utils._try_divide(len(set(obs_ngrams)), len(obs_ngrams)))
-        return res if is_agg else res[0]
+        obs_tokens = nlp_utils._tokenize(obs, token_pattern)
+        obs_ngrams = ngram_utils._ngrams(obs_tokens, self.ngram)
+        return np_utils._try_divide(len(set(obs_ngrams)), len(obs_ngrams))
 
 def main():
     logname = "generate_feature_basic.log"
     logger = logging_utils._get_logger(config.LOG_DIR, logname)
     dfAll = table_utils._read(config.ALL_DATA)
-
-    # TODO: This is incredibly wasteful, needing tons of memory
-    # to pull in many duplicates of data because there are on average
-    # 75+ search sessions with the same hit_title/opening_text/category/etc.
 
     # basic
     generators = [DocLen, DocFreq, DocEntropy, DigitCount, DigitRatio]
@@ -208,10 +124,11 @@ def main():
             'hit_outgoing_link', 'hit_external_link', 'hit_redirect.title',
             'hit_auxiliary_text']
     aggregations = ['mean', 'std', 'max', 'min', 'median']
+    param_list = [aggregations]
     for generator in generators:
-        param_list = [aggregations]
+        multi_gen = MultiObjEstimatorWrapper(generator)
         dedup = False if generator == DocFreq else True
-        sf = StandaloneFeatureWrapper(generator, dfAll, obs_fields, param_list, config.FEAT_DIR, logger, dedup)
+        sf = StandaloneFeatureWrapper(multi_gen, dfAll, obs_fields, param_list, config.FEAT_DIR, logger, dedup)
         sf.go()
 
     # unique count
@@ -234,9 +151,10 @@ def main():
     ngrams = [1,2,3]
     for generator in generators:
         for ngram in ngrams:
+            multi_gen = MultiObjEstimatorWrapper(generator)
             param_list = [ngram, aggregations]
             dedup = True
-            sf = StandaloneFeatureWrapper(generator, dfAll, obs_fields, param_list, config.FEAT_DIR, logger, dedup)
+            sf = StandaloneFeatureWrapper(multi_gen, dfAll, obs_fields, param_list, config.FEAT_DIR, logger, dedup)
             sf.go()
 
 if __name__ == "__main__":

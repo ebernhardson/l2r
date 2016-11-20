@@ -12,11 +12,11 @@ class BaseEstimator(object):
     def __init__(self, obs_corpus, target_corpus, aggregation_mode, id_list=None):
         self.obs_corpus = obs_corpus
         self.N = len(obs_corpus)
-        # for standalone features, not sure why a range though
+        # for standalone features, range so zip works right
         self.target_corpus = range(self.N) if target_corpus is None else target_corpus
-        # id_list is used for group based relevance/distance detectors
+        # id_list is used for group based relevance/distance detectors (where?)
         self.id_list = range(self.N) if id_list is None else id_list
-        # aggregation for list features, e.g. intersect points
+        # aggregation for multi-value input fields such as hit_heading and hit_category
         self.aggregation_mode, self.aggregator = self._check_aggregation_mode(aggregation_mode)
 
     def _check_aggregation_mode(self, aggregation_mode):
@@ -50,6 +50,46 @@ class BaseEstimator(object):
             res = np.asarray(score)
         return res
 
+class BaseMultiEstimatorWrapper(object):
+    """
+    Base class for wrapping an estimator to support multi-obs or multi-target
+    values such as hit_redirect.title and hit_heading
+    """
+
+    def __init__(self, generator):
+        self.generator = generator
+
+    def __call__(self, *args, **kwargs):
+        est = self.generator(*args, **kwargs)
+        assert est.aggregation_mode != [""]
+
+        # Evil hax
+        name = est.__name__()
+        def __name__():
+            return ["%s_%s" % (name, x) for x in est.aggregation_mode]
+        est.__name__ = __name__
+
+        orig_transform_one = est.transform_one
+        def transform_one(obs, target, id):
+            assert isinstance(obs, tuple)
+            return [orig_transform_one(x, target, id) for x in obs]
+        est.transform_one = self.gen_transform_one(est.transform_one)
+
+        return est
+
+class MultiObjEstimatorWrapper(BaseMultiEstimatorWrapper):
+    def gen_transform_one(self, transform_one):
+        def replacement(obs, target, id):
+            assert isinstance(obs, tuple)
+            return [transform_one(x, target, id) for x in obs]
+        return replacement
+
+class MultiTargetEstimatorWrapper(BaseMultiEstimatorWrapper):
+    def gen_transform_one(self, transform_one):
+        def replacement(obs, target, id):
+            assert isinstance(target, tuple)
+            return [transform_one(obs, x, id) for x in target]
+        return replacement
 
 # Wrapper for generating standalone features, e.g.
 # count of words in a search query
