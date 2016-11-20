@@ -1,0 +1,10 @@
+Cython==0.25.1
+clickmodels==1.0.2
+gevent==1.1.2
+grequests==0.3.0
+nltk==3.2.1
+numpy==1.11.2
+pandas==0.19.1
+progressbar2==3.11.0
+requests==2.12.1
+scipy==0.13.3
