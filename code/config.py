@@ -11,7 +11,7 @@ MIN_NUM_SEARCHES = 35
 # Project searched against
 WIKI_PROJECT = 'en.wikipedia'
 # The number of unique queries to source
-MAX_QUERIES = 10000
+MAX_QUERIES = 100
 
 # Identifier of the query being worked on
 QUERY_IDENT = "%s_%dS_%dQ" % (WIKI_PROJECT, MIN_NUM_SEARCHES, MAX_QUERIES)
@@ -24,11 +24,26 @@ LOG_DIR = "%s/log/%s" % (ROOT_DIR, QUERY_IDENT)
 TMP_DIR = "%s/tmp" % (ROOT_DIR)
 
 # elasticsearch doc fields to augment with
-ES_DOC_FIELDS = [
-    'incoming_links', 'popularity_score',
-    'text_bytes', 'wp10',
-]
+ES_DOC_FIELDS_DEFAULTS = {
+    'incoming_links': 0,
+    'popularity_score': 0,
+    'text_bytes': 0,
+    'wp10': 0,
+    # Giving all the defaults a single value allows features
+    # to always assume a value exists. These must be tuples
+    # for drop_duplicates() to work
+    'category': (u"",),
+    'template': (u"",),
+    'heading': (u"",),
+    'outgoing_link': (u"",),
+    'external_link': (u"",),
+    'redirect.title': (u"",),
+    'auxiliary_text': (u"",),
+    'opening_text': u"",
+}
+ES_DOC_FIELDS = ES_DOC_FIELDS_DEFAULTS.keys()
 
+# fields to collect term vectors for
 ES_TERM_FIELDS = [
     'title', 'title.plain',
     'heading', 'heading.plain',

@@ -18,22 +18,18 @@ def dfEsQueryTermVec():
     return table_utils._read(config.ES_QUERY_TERM_VEC)
 
 def main():
-    # Consistently uses inner, now sure if it's necessary but ensures
-    # most rows are complete
+    # Consistently uses inner to ensure we have complete rows. Otherwise
+    # we would have oddities like mixed unicode and NaN
     dfClicks = table_utils._read(config.CLICK_DATA)
-    # Keep our data volumes down by removing things that are only duplicated
-    # by identity. Not perfect, but is it good enough?
-    # Alternatively could groupby(['query', 'hit_page_id'] and try to normalize
-    # out the other data.
-    del dfClicks['identity']
-    dfClicks = dfClicks.drop_duplicates()
-
     dfAll = dfClicks \
-            .join(dfRel().set_index(['query', 'hit_title']),
-                          on=['query', 'hit_title'], how='left') \
-            .join(dfEsPageDocs(), on='hit_page_id', how='left') \
-            .join(dfEsPageTermVec(), on='hit_page_id', how='left') \
-            .join(dfEsQueryTermVec(), on='query', how='left')
+            .join(dfRel().set_index(['norm_query', 'hit_title']),
+                          on=['norm_query', 'hit_title'], how='inner') \
+            .join(dfEsPageDocs(), on=['hit_page_id'], how='inner')
+            # These are rediculous memory hogs, although so is the above...
+            # Need to find a better way to generate features without
+            # all the duplication and resulting memory explosion
+            #.join(dfEsPageTermVec(), on='hit_page_id', how='left') \
+            #.join(dfEsQueryTermVec(), on='query', how='left')
 
     table_utils._write(config.ALL_DATA, dfAll)
 

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 import os
 
@@ -45,32 +46,45 @@ class BaseEstimator(object):
                     except:
                         s = config.MISSING_VALUE_NUMERIC
                     res[i,m] = s
+        else:
+            res = np.asarray(score)
         return res
 
 
 # Wrapper for generating standalone features, e.g.
 # count of words in a search query
 class StandaloneFeatureWrapper(object):
-    def __init__(self, generator, dfAll, obs_fields, param_list, feat_dir, logger):
+    def __init__(self, generator, dfAll, obs_fields, param_list, feat_dir, logger, deduplicate=False):
         self.generator = generator
         self.dfAll = dfAll
         self.obs_fields = obs_fields
         self.param_list = param_list
         self.feat_dir = feat_dir
         self.logger = logger
-        self.force_corr = force_corr
+        self.deduplicate = deduplicate
 
     def go(self):
         y_train = self.dfAll["relevance"].values
         for obs_field in self.obs_fields:
-            if obs_fields not in self.dfAll.columns:
+            if obs_field not in self.dfAll.columns:
                 self.logger.info("Skip %s" % (obs_field))
                 continue
-            obs_corpus = self.dfAll[obs_field].values
+            if self.deduplicate == True:
+                obs_corpus = self.dfAll[obs_field].drop_duplicates().values
+            else:
+                obs_corpus = self.dfAll[obs_field].values
             estimator = self.generator(obs_corpus, None, *self.param_list)
             x = estimator.transform()
+            if self.deduplicate == True:
+                # re-duplicate the values
+                x_df = pd.DataFrame(zip(obs_corpus, x), columns=['src', 'est']).set_index(['src'])
+                # We need a list to ensure we get back a DataFrame and not a Series
+                x = self.dfAll[[obs_field]].join(x_df, on=[obs_field], how='left')['est'].values
+                # This feels like a hack, but we have ended up with an ndarray of ndarray on
+                # aggregations and need to fix it
+                if type(x[0]) == np.ndarray:
+                    x = np.vstack(x)
             if isinstance(estimator.__name__(), list):
-                # when is __name__ a list?
                 for i, feat_name in enumerate(estimator.__name__()):
                     dim = 1
                     fname = "%s_%s_%dD" % (feat_name, obs_field, dim)
