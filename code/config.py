@@ -61,10 +61,8 @@ CLICK_DATA = "%s/source_clicks.pkl" % (DATA_DIR)
 RELEVANCE_DATA = "%s/relevance.pkl" % (DATA_DIR)
 
 # Document values from elasticsearch
-ES_PAGE_DOCS = "%s/es_page_data.pkl" % (DATA_DIR)
-
-# Term vector information by page_id and query. Stored in shelve's
-# due sizes that don't fit in memory very well
+ES_PAGE_DOCS_SHELVE = "%s/es_page_data.shelve" % (DATA_DIR)
+# Term vector information by page_id and query
 ES_PAGE_TERM_VEC_SHELVE = "%s/es_page_term_vec.shelve" % (DATA_DIR)
 ES_QUERY_TERM_VEC_SHELVE = "%s/es_query_term_vec.shelve" % (DATA_DIR)
 

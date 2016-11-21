@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 import os
+import functools
 
 import config
 from utils import np_utils, table_utils
@@ -53,7 +54,7 @@ class BaseEstimator(object):
 class BaseMultiEstimatorWrapper(object):
     """
     Base class for wrapping an estimator to support multi-obs or multi-target
-    values such as hit_redirect.title and hit_heading
+    values such as redirect.title and heading
     """
 
     def __init__(self, generator):
@@ -91,6 +92,24 @@ class MultiTargetEstimatorWrapper(BaseMultiEstimatorWrapper):
             return [transform_one(obs, x, id) for x in target]
         return replacement
 
+def make_transformer(dfAll, field):
+    if field in config.ES_DOC_FIELDS:
+        transformer = functools.partial(ShelveLookupTransformer, config.ES_PAGE_DOCS_SHELVE, field)
+        field = 'hit_page_id'
+    elif not field in dfAll.columns:
+        transformer = None
+    else:
+        transformer = NoopTransformer
+    return transformer, field
+
+def make_deduplicator(deduplicate, dfAll, obs_field, target_field):
+    if not deduplicate:
+        return NoopDeduplicator(dfAll, obs_field, target_field)
+    elif target_field is None:
+        return SingleFieldDeduplicator(dfAll, obs_field)
+    else:
+        return DualFieldDeduplicator(dfAll, obs_field, target_field)
+
 # Wrapper for generating standalone features, e.g.
 # count of words in a search query
 class StandaloneFeatureWrapper(object):
@@ -101,44 +120,35 @@ class StandaloneFeatureWrapper(object):
         self.param_list = param_list
         self.feat_dir = feat_dir
         self.logger = logger
-        self.deduplicate = deduplicate
+        self.make_deduplicator = functools.partial(make_deduplicator, deduplicate, dfAll)
 
     def go(self):
         y_train = self.dfAll["relevance"].values
         for obs_field in self.obs_fields:
-            if obs_field not in self.dfAll.columns:
+            obs_transformer, obs_field_transformed = make_transformer(self.dfAll, obs_field)
+            if obs_transformer is None:
                 self.logger.info("Skip %s" % (obs_field))
                 continue
-            if self.deduplicate == True:
-                obs_corpus = self.dfAll[obs_field].drop_duplicates().values
-            else:
-                obs_corpus = self.dfAll[obs_field].values
-            estimator = self.generator(obs_corpus, None, *self.param_list)
-            x = estimator.transform()
-            if self.deduplicate == True:
-                # re-duplicate the values
-                x_df = pd.DataFrame(zip(obs_corpus, x), columns=['src', 'est']).set_index(['src'])
-                # We need a list to ensure we get back a DataFrame and not a Series
-                x = self.dfAll[[obs_field]].join(x_df, on=[obs_field], how='left')['est'].values
-                # This feels like a hack, but we have ended up with an ndarray of ndarray on
-                # aggregations and need to fix it
-                if type(x[0]) == np.ndarray:
-                    x = np.vstack(x)
+
+            deduplicator = self.make_deduplicator(obs_field_transformed, None)
+            obs_corpus, _ = deduplicator.deduplicate()
+            obs_trans = obs_transformer(obs_corpus)
+            estimator = self.generator(obs_trans, None, *self.param_list)
+            x = deduplicator.reduplicate(obs_corpus, None, estimator.transform())
+
             if isinstance(estimator.__name__(), list):
                 for i, feat_name in enumerate(estimator.__name__()):
-                    dim = 1
-                    fname = "%s_%s_%dD" % (feat_name, obs_field, dim)
-                    table_utils._write(os.path.join(self.feat_dir, fname+config.FEAT_FILE_SUFFIX), x[:,i])
-                    corr = np_utils._corr(x[:,i], y_train)
-                    self.logger.info("%s (%dD): corr=%.6f" % (fname, dim, corr))
+                    self.save_feature(feat_name, obs_field, 1, x[:,i], y_train)
             else:
                 dim = np_utils._dim(x)
-                fname = "%s_%s_%dD" % (estimator.__name__(), obs_field, dim)
-                table_utils._write(os.path.join(self.feat_dir, fname+config.FEAT_FILE_SUFFIX), x)
-                if dim == 1:
-                    corr = np_utils._corr(x, y_train)
-                    self.logger.info("%s (%dD): corr=%.6f" % (fname, dim, corr))
+                self.save_feature(estimator.__name__(), obs_field, dim, x, y_train)
 
+    def save_feature(self, feat_name, obs_field, dim, x, y):
+        fname = "%s_%s_%dD" % (feat_name, obs_field, dim)
+        table_utils._write(os.path.join(self.feat_dir, fname+config.FEAT_FILE_SUFFIX), x)
+        if dim == 1:
+            corr = np_utils._corr(x, y)
+            self.logger.info("%s (%dD): corr=%.6f" % (fname, dim, corr))
 
 # wrapper for generating pairwise feature, e.g.,
 # intersect count of words between query and page title
@@ -151,47 +161,139 @@ class PairwiseFeatureWrapper(object):
         self.param_list = param_list
         self.feat_dir = feat_dir
         self.logger = logger
-        self.deduplicate = deduplicate
+        self.make_deduplicator = functools.partial(make_deduplicator, deduplicate, dfAll)
 
     def go(self):
         y_train = self.dfAll['relevance'].values
         for obs_field in self.obs_fields:
-            if not obs_field in self.dfAll.columns:
+            obs_transformer, obs_field_transformed = make_transformer(self.dfAll, obs_field)
+            if obs_transformer is None:
                 self.logger.info("Skip %s" % (obs_field))
                 continue
-            if not self.deduplicate:
-                obs_corpus = self.dfAll[obs_field].values
+
             for target_field in self.target_fields:
-                if not target_field in self.dfAll.columns:
+                target_transformer, target_field_transformed = make_transformer(self.dfAll, target_field)
+                if target_transformer is None:
                     self.logger.info("Skip %s" % (target_field))
                     continue
-                if self.deduplicate:
-                    combined_corpus = self.dfAll[[obs_field, target_field]].drop_duplicates().values
-                    obs_corpus = combined_corpus[:,0]
-                    target_corpus = combined_corpus[:,1]
-                else:
-                    target_corpus = self.dfAll[target_field].values
-                estimator = self.generator(obs_corpus, target_corpus, *self.param_list)
-                x = estimator.transform()
-                if self.deduplicate:
-                    x_df = pd.DataFrame(zip(obs_corpus, target_corpus, x), columns=['src1', 'src2', 'est']).set_index(['src1', 'src2'])
-                    x = self.dfAll[[obs_field, target_field]].join(x_df, on=[obs_field, target_field], how='left')['est'].values
-                    # This feels like a hack, but we have ended up with an ndarray of ndarray on
-                    # aggregations and need to fix it
-                    if type(x[0]) == np.ndarray:
-                        x = np.vstack(x)
+
+                deduplicator = self.make_deduplicator(obs_field_transformed, target_field_transformed)
+                obs_corpus, target_corpus = deduplicator.deduplicate()
+                obs_trans = obs_transformer(obs_corpus)
+                target_trans = target_transformer(target_corpus)
+                estimator = self.generator(obs_trans, target_trans, *self.param_list)
+                x = deduplicator.reduplicate(obs_corpus, target_corpus, estimator.transform())
+
                 if isinstance(estimator.__name__(), list):
                     for i, feat_name in enumerate(estimator.__name__()):
-                        dim = 1
-                        fname = "%s_%s_x_%s_%dD" % (feat_name, obs_field, target_field, dim)
-                        table_utils._write(os.path.join(self.feat_dir, fname + config.FEAT_FILE_SUFFIX), x[:,i])
-                        corr = np_utils._corr(x[:,i], y_train)
-                        self.logger.info("%s (%dD): corr = %.6f" % (fname, dim, corr))
+                        self.save_feature(feat_name, obs_field, target_field, 1, x[:,i], y_train)
                 else:
                     dim = np_utils._dim(x)
-                    fname = "%s_%s_x_%s_%dD" % (estimator.__name__(), obs_field, target_field, dim)
-                    table_utils._write(os.path.join(self.feat_dir, fname + config.FEAT_FILE_SUFFIX), x)
-                    if dim == 1:
-                        corr = np_utils._corr(x, y_train)
-                        self.logger.info("%s (%dD): corr = %.6f" % (fname, dim, corr))
+                    self.save_feature(estimator.__name__(), obs_field, target_field, dim, x, y_train)
 
+    def save_feature(self, feat_name, obs_field, target_field, dim, x, y):
+        fname = "%s_%s_x_%s_%dD" % (feat_name, obs_field, target_field, dim)
+        table_utils._write(os.path.join(self.feat_dir, fname + config.FEAT_FILE_SUFFIX), x)
+        if dim == 1:
+            corr = np_utils._corr(x, y)
+            self.logger.info("%s (%dD): corr = %.6f" % (fname, dim, corr))
+
+class NoopTransformer(object):
+    def __init__(self, corpus):
+        self.corpus = corpus
+
+    def __len__(self):
+        return len(self.corpus)
+
+    def __iter__(self):
+        return iter(self.corpus)
+
+    def __getitem__(self, i):
+        return self.corpus[i]
+
+
+# Could be more carefull .. but we will only open at
+# make 3 (currently) so whatever...
+open_shelves = {}
+
+class ShelveLookupTransformer(object):
+    def __init__(self, filename, field, corpus):
+        self.filename = filename
+        self.field = field
+        self.corpus = corpus
+        if not filename in open_shelves:
+            open_shelves[filename] = table_utils._open_shelve_read(self.filename)
+        self.data = open_shelves[filename]
+
+    def __len__(self):
+        return len(self.corpus)
+
+    def __iter__(self):
+        for item in self.corpus:
+            yield self.data[str(item)][self.field]
+
+    def __getitem__(self, i):
+        val = self.corpus[i]
+        return self.data[str(val)][self.field]
+
+
+class NoopDeduplicator(object):
+    """
+    Fills the deduplicator interface, but does nothing for
+    estimators that don't want deduplication
+    """
+    def __init__(self, dfAll, obs_field, target_field):
+        self.dfAll = dfAll
+        self.obs_field = obs_field
+        self.target_field = target_field
+
+    def deduplicate(self):
+        obs_corpus = self.dfAll[self.obs_field].values
+        target_corpus = None if self.target_field is None else self.dfAll[self.target_field].value
+        return obs_corpus, target_corpus
+
+    def reduplicate(self, obs_corpus, target_corpus, x):
+        return x
+
+class SingleFieldDeduplicator(object):
+    def __init__(self, dfAll, obs_field):
+        self.dfAll = dfAll
+        self.obs_field = obs_field
+
+    def deduplicate(self):
+        obs_corpus = self.dfAll[self.obs_field].drop_duplicates().values
+        return obs_corpus, None
+
+    def reduplicate(self, obs_corpus, target_corpus, x):
+        # re-duplicate the values
+        x_df = pd.DataFrame(zip(obs_corpus, x), columns=['src', 'est']).set_index(['src'])
+        # We need a list to ensure we get back a DataFrame and not a Series
+        x_redup = self.dfAll[[self.obs_field]].join(x_df, on=[self.obs_field], how='left')['est'].values
+        # This feels like a hack, but we have ended up with an ndarray of ndarray on
+        # aggregations and need to fix it
+        if type(x[0]) == np.ndarray:
+            x_redup = np.vstack(x_redup)
+        return x_redup
+
+class DualFieldDeduplicator(object):
+    def __init__(self, dfAll, obs_field, target_field):
+        self.dfAll = dfAll
+        self.obs_field = obs_field
+        self.target_field = target_field
+
+    def deduplicate(self):
+        combined_corpus = self.dfAll[[self.obs_field, self.target_field]].drop_duplicates().values
+        obs_corpus = combined_corpus[:,0]
+        target_corpus = combined_corpus[:,1]
+        return obs_corpus, target_corpus
+
+    def reduplicate(self, obs_corpus, target_corpus, x):
+        x_df = pd.DataFrame(zip(obs_corpus, target_corpus, x), columns=['src1', 'src2', 'est']) \
+                .set_index(['src1', 'src2'])
+        x_redup = self.dfAll[[self.obs_field, self.target_field]] \
+                .join(x_df, on=[self.obs_field, self.target_field], how='left')['est'].values
+        # This feels like a hack, but we have ended up with an ndarray of ndarray on
+        # aggregations and need to fix it
+        if type(x[0]) == np.ndarray:
+            x_redup = np.vstack(x_redup)
+        return x_redup

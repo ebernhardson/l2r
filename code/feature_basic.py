@@ -112,7 +112,7 @@ def main():
 
     # basic
     generators = [DocLen, DocFreq, DocEntropy, DigitCount, DigitRatio]
-    obs_fields = ["query", "norm_query", "hit_title", 'hit_opening_text']
+    obs_fields = ["query", "norm_query", "hit_title", 'opening_text']
     for generator in generators:
         param_list = []
         dedup = False if generator == DocFreq else True
@@ -120,9 +120,9 @@ def main():
         sf.go()
 
     # basic against multi-value fields
-    obs_fields = ['hit_category', 'hit_template', 'hit_heading',
-            'hit_outgoing_link', 'hit_external_link', 'hit_redirect.title',
-            'hit_auxiliary_text']
+    obs_fields = ['category', 'template', 'heading',
+            'outgoing_link', 'external_link', 'redirect.title',
+            'auxiliary_text']
     aggregations = ['mean', 'std', 'max', 'min', 'median']
     param_list = [aggregations]
     for generator in generators:
@@ -133,7 +133,7 @@ def main():
 
     # unique count
     generators = [UniqueCount_Ngram, UniqueRatio_Ngram]
-    obs_fields = ["query", "norm_query", "hit_title", 'hit_opening_text']
+    obs_fields = ["query", "norm_query", "hit_title", 'opening_text']
     ngrams = [1,2,3]
     for generator in generators:
         for ngram in ngrams:
@@ -144,9 +144,9 @@ def main():
 
     # unique count against multi-value fields
     generators = [UniqueCount_Ngram, UniqueRatio_Ngram]
-    obs_fields = ['hit_category', 'hit_template', 'hit_heading',
-            'hit_outgoing_link', 'hit_external_link', 'hit_redirect.title',
-            'hit_auxiliary_text']
+    obs_fields = ['category', 'template', 'heading',
+            'outgoing_link', 'external_link', 'redirect.title',
+            'auxiliary_text']
     aggregations = ['mean', 'std', 'max', 'min', 'median']
     ngrams = [1,2,3]
     for generator in generators:

@@ -15,34 +15,39 @@ def main():
     # returns an ndarray
     page_ids = table_utils._read(config.CLICK_DATA)['hit_page_id'].unique()
 
-
     url = config.ES_URL + '/page/_mget'
     params = {'fields': ','.join(config.ES_DOC_FIELDS)}
-    session = requests.Session()
-    reqs = []
-    for batch in np_utils._split(page_ids, 1000):
-        data = json.dumps({'ids': list(batch)})
-        reqs.append(grequests.post(url, data=data, params=params, session=session))
 
     defaults = config.ES_DOC_FIELDS_DEFAULTS
     multi_value_fields = [k for k, v in defaults.iteritems() if isinstance(v, tuple)]
 
-    docs = []
-    with progressbar.ProgressBar(max_value=len(reqs)) as bar:
-        for r in bar(grequests.imap(reqs, size=20, exception_handler=exception_handler)):
-            found = json.loads(r.text)['docs']
-            for d in found:
-                if not d['found']:
-                    continue
-                res = {'hit_%s' %(k): v for k, v in defaults.iteritems()}
-                for k, v in d['fields'].iteritems():
-                    # ES alwards returns a list, even if there is only one item.
-                    # Flatten down single valued fields
-                    res['hit_%s' % (k)] = tuple(v) if k in multi_value_fields else v[0]
-                res['hit_page_id'] = int(d['_id'])
-                docs.append(res)
+    docs = table_utils._open_shelve_write(config.ES_PAGE_DOCS_SHELVE)
+    i = 0
+    try:
+        with progressbar.ProgressBar(max_value=len(page_ids)) as bar:
+            for top_batch in np_utils._split(page_ids, 10000):
+                session = requests.Session()
+                reqs = []
+                for batch in np_utils._split(top_batch, 100):
+                    data = json.dumps({'ids': list(batch)})
+                    reqs.append(grequests.post(url, data=data, params=params, session=session))
+                for r in grequests.imap(reqs, size=20, exception_handler=exception_handler):
+                    found = json.loads(r.text)['docs']
+                    for d in found:
+                        if not d['found']:
+                            continue
+                        res = defaults.copy()
+                        for field, v in d['fields'].iteritems():
+                            # ES alwards returns a list, even if there is only one item.
+                            # Flatten down single valued fields
+                            res[field] = tuple(v) if field in multi_value_fields else v[0]
+                        docs[str(d['_id'])] = res
+                    i += len(found)
+                    bar.update(i)
+                docs.sync()
+    finally:
+        docs.close()
 
-    table_utils._write(config.ES_PAGE_DOCS, pd.DataFrame(docs).set_index(['hit_page_id']))
 
 if __name__ == "__main__":
     main()

@@ -3,22 +3,31 @@ import pandas as pd
 import config
 from utils import table_utils
 
-# Helper methods make it a bit cleaner to just pull in the df
-# once for a join, and let gc throw it back out, hopefully
 def dfRel():
     return table_utils._read(config.RELEVANCE_DATA)
 
-def dfEsPageDocs():
-    return table_utils._read(config.ES_PAGE_DOCS)
+def shelve_keys(fname):
+    data = table_utils._open_shelve_read(fname)
+    keys = data.keys()
+    data.close()
+    return keys
 
 def main():
-    # Consistently uses inner to ensure we have complete rows. Otherwise
-    # we would have oddities like mixed unicode and NaN
+    # uses inner to ensure we have complete rows. Otherwise
+    # we would have NaN mixed in with the relevance scores,
+    # and we can't train on those
     dfClicks = table_utils._read(config.CLICK_DATA)
     dfAll = dfClicks \
             .join(dfRel().set_index(['norm_query', 'hit_title']),
-                          on=['norm_query', 'hit_title'], how='inner') \
-            .join(dfEsPageDocs(), on=['hit_page_id'], how='inner')
+                  on=['norm_query', 'hit_title'], how='inner')
+
+    # Filter out pages that couldn't be loaded as docs/termvecs
+    es_docs_keys = set(map(int, shelve_keys(config.ES_PAGE_DOCS_SHELVE)))
+    dfAll = dfAll[dfAll['hit_page_id'].isin(es_docs_keys)]
+
+    es_termvec_keys = set(map(int, shelve_keys(config.ES_PAGE_TERM_VEC_SHELVE)))
+    dfAll = dfAll[dfAll['hit_page_id'].isin(es_termvec_keys)]
+
 
     table_utils._write(config.ALL_DATA, dfAll)
 

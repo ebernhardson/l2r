@@ -81,7 +81,7 @@ def run_ngram_jaccard():
     generators = [JaccardCoef_Ngram, DiceDistance_Ngram]
     # single valued fields
     obs_fields_list = [["query", "norm_query"]]
-    target_fields_list = [["hit_title", "hit_opening_text" ]]
+    target_fields_list = [["hit_title", "opening_text" ]]
     ngrams = [1,2,3,12,123][:3]
     dedup = True
     for obs_fields, target_fields in zip(obs_fields_list, target_fields_list):
@@ -92,9 +92,9 @@ def run_ngram_jaccard():
                 pf.go()
 
     # multi-valued fields
-    target_fields_list = [["hit_category", "hit_template", "hit_heading",
-            "hit_outgoing_link", "hit_external_link", "hit_redirect.title",
-            "hit_auxiliary_text"]]
+    target_fields_list = [["category", "template", "heading",
+            "outgoing_link", "external_link", "redirect.title",
+            "auxiliary_text"]]
     aggregation_mode = ["mean", "std", "max", "min", "median"]
     for obs_fields, target_fields in zip(obs_fields_list, target_fields_list):
         for generator in generators:
@@ -111,7 +111,7 @@ def run_edit_distance():
 
     # single value targets
     obs_fields_list = [["query", "norm_query"]]
-    target_fields_list = [["hit_title", "hit_opening_text"]]
+    target_fields_list = [["hit_title", "opening_text"]]
     dedup = True
     for obs_fields, target_fields in zip(obs_fields_list, target_fields_list):
         param_list = []
@@ -119,9 +119,9 @@ def run_edit_distance():
         pf.go()
 
     # multi-value targets
-    target_fields_list = [["hit_category", "hit_template", "hit_heading",
-            "hit_outgoing_link", "hit_external_link", "hit_redirect.title",
-            "hit_auxiliary_text"]]
+    target_fields_list = [["category", "template", "heading",
+            "outgoing_link", "external_link", "redirect.title",
+            "auxiliary_text"]]
     aggregation_mode = ["mean", "std", "max", "min", "median"]
     for obs_fields, target_fields in zip(obs_fields_list, target_fields_list):
         param_list = [aggregation_mode]

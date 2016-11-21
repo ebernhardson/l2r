@@ -54,12 +54,15 @@ def main():
                                    session=session, callback=batch_parse_termvec(batch)))
 
     data = table_utils._open_shelve_write(config.ES_QUERY_TERM_VEC_SHELVE)
+    i = 0
     try:
-        with progressbar.ProgressBar(max_value=len(reqs)) as bar:
-            for r in bar(grequests.imap(reqs, size=20, exception_handler=exception_handler)):
+        with progressbar.ProgressBar(max_value=len(queries)) as bar:
+            for r in grequests.imap(reqs, size=20, exception_handler=exception_handler):
                 for query, vecs in r.data.iteritems():
                     # Can't directly use unicode strings until 3.x, only strings
                     data[query.encode('utf8')] = vecs
+                i += len(r.data)
+                bar.update(i)
     finally:
         data.close()
 

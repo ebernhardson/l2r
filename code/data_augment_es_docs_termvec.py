@@ -54,7 +54,6 @@ def main():
                 # sync every 10k docs frees up memory
                 docs.sync()
     finally:
-        # TODO: can `with` be used to not need this?
         docs.close()
 
 if __name__ == "__main__":
