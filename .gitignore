@@ -3,6 +3,8 @@
 /features
 /log
 /tmp
+/code/conf
+/clean
 
 # virtualenv
 /bin

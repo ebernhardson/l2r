@@ -1,3 +1,5 @@
+import numpy as np
+
 from utils import os_utils
 
 # Top level configuration
@@ -19,7 +21,9 @@ QUERY_IDENT = "%s_%dS_%dQ" % (WIKI_PROJECT, MIN_NUM_SEARCHES, MAX_QUERIES)
 # A few basic directories
 ROOT_DIR = "../"
 DATA_DIR = "%s/data/%s" % (ROOT_DIR, QUERY_IDENT)
+CLEAN_DATA_DIR = "%s/clean/%s" % (ROOT_DIR, QUERY_IDENT)
 FEAT_DIR = "%s/features/%s" % (ROOT_DIR, QUERY_IDENT)
+FEAT_CONF_DIR = "conf/%s" % (QUERY_IDENT)
 LOG_DIR = "%s/log/%s" % (ROOT_DIR, QUERY_IDENT)
 TMP_DIR = "%s/tmp" % (ROOT_DIR)
 
@@ -68,8 +72,11 @@ ES_QUERY_TERM_VEC_SHELVE = "%s/es_query_term_vec.shelve" % (DATA_DIR)
 
 # Above packaged together with 'plain' analyzed fields
 ALL_DATA = "%s/all.pkl" % (DATA_DIR)
+INFO_DATA = "%s/info.csv.pkl" % (CLEAN_DATA_DIR)
 
 FEAT_FILE_SUFFIX = ".pkl"
+
+COUNT_TRANSFORM = np.log1p
 
 MISSING_VALUE_STRING = "MISSINGVALUE"
 MISSING_VALUE_NUMERIC = -1
@@ -91,7 +98,10 @@ DBN_CONFIG = {
 }
 DIRS = [
     DATA_DIR,
+    CLEAN_DATA_DIR,
     FEAT_DIR,
+    FEAT_DIR + '/Combine',
+    FEAT_CONF_DIR,
     LOG_DIR,
     TMP_DIR,
 ]

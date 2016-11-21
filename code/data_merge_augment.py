@@ -31,6 +31,9 @@ def main():
 
     table_utils._write(config.ALL_DATA, dfAll)
 
+    dfInfo = dfAll[["relevance"]].copy()
+    table_utils._write(config.INFO_DATA, dfInfo)
+
     print 'Source clicks len: %d' % (len(dfClicks))
     print 'Final data len: %d' % (len(dfAll))
     print 'Ratio: %.3f' % (float(len(dfAll))/len(dfClicks))
