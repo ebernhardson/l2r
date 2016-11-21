@@ -11,12 +11,6 @@ def dfRel():
 def dfEsPageDocs():
     return table_utils._read(config.ES_PAGE_DOCS)
 
-def dfEsPageTermVec():
-    return table_utils._read(config.ES_PAGE_TERM_VEC)
-
-def dfEsQueryTermVec():
-    return table_utils._read(config.ES_QUERY_TERM_VEC)
-
 def main():
     # Consistently uses inner to ensure we have complete rows. Otherwise
     # we would have oddities like mixed unicode and NaN
@@ -25,11 +19,6 @@ def main():
             .join(dfRel().set_index(['norm_query', 'hit_title']),
                           on=['norm_query', 'hit_title'], how='inner') \
             .join(dfEsPageDocs(), on=['hit_page_id'], how='inner')
-            # These are rediculous memory hogs, although so is the above...
-            # Need to find a better way to generate features without
-            # all the duplication and resulting memory explosion
-            #.join(dfEsPageTermVec(), on='hit_page_id', how='left') \
-            #.join(dfEsQueryTermVec(), on='query', how='left')
 
     table_utils._write(config.ALL_DATA, dfAll)
 

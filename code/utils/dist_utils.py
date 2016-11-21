@@ -15,17 +15,10 @@ import config
 def _es_cosine_sim(a, b):
     # Calculates cosine sim based on tokenize, stem, score
     # generated externally in elasticsearch. This has the
-    # downside of only using top n tokens for large fields
+    # downside of only using top n tokens
 
-    if type(a[0]) == float or type(b[0]) == float:
-        # Should have been list-ish, these are nan's
+    if len(a) == 0 or len(b) == 0:
         return 0.0
-
-    # args are in the form [[word, word], [score, score]]
-    # building a sparse matrix and shoving through sklearn
-    # cosine sim might(?) be faster, but this was more obvious
-    a = dict(zip(*list(a)))
-    b = dict(zip(*list(b)))
 
     intersect = set(a.keys()).intersection(b.keys())
     numerator = sum(a[x] * b[x] for x in intersect)
