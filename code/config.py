@@ -96,6 +96,7 @@ DBN_CONFIG = {
     'QUERY_INDEPENDENT_PAGER': False,
     'DEFAULT_REL': 0.5
 }
+
 DIRS = [
     DATA_DIR,
     CLEAN_DATA_DIR,

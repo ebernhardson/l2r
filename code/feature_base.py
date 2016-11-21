@@ -70,10 +70,9 @@ class BaseMultiEstimatorWrapper(object):
             return ["%s_%s" % (name, x) for x in est.aggregation_mode]
         est.__name__ = __name__
 
-        orig_transform_one = est.transform_one
-        def transform_one(obs, target, id):
-            assert isinstance(obs, tuple)
-            return [orig_transform_one(x, target, id) for x in obs]
+        # It would be nice if we could deduplicate here as well, but
+        # it requires pulling the full dataset into memory. A quick
+        # test with outgoing links took >10GB before being canceled
         est.transform_one = self.gen_transform_one(est.transform_one)
 
         return est
@@ -96,6 +95,25 @@ def make_transformer(dfAll, field):
     if field in config.ES_DOC_FIELDS:
         transformer = functools.partial(ShelveLookupTransformer, config.ES_PAGE_DOCS_SHELVE, field)
         field = 'hit_page_id'
+    elif field[-8:] == '_termvec':
+        if field[:-8] in config.ES_TERM_FIELDS:
+            es_field = field[:-8]
+            fname = config.ES_PAGE_TERM_VEC_SHELVE
+            field = 'hit_page_id'
+        elif field[:6] == 'query_':
+            es_field = field[6:-8]
+            fname = config.ES_QUERY_TERM_VEC_SHELVE
+            field = 'query'
+        elif field[:11] == 'norm_query_':
+            es_field = field[11:-8]
+            fname = config.ES_QUERY_TERM_VEC_SHELVE
+            field = 'norm_query'
+        else:
+            es_field = None
+        if es_field in config.ES_TERM_FIELDS:
+            transformer = functools.partial(ShelveLookupTransformer, fname, es_field)
+        else:
+            transformer = None
     elif not field in dfAll.columns:
         transformer = None
     else:
@@ -190,6 +208,13 @@ class PairwiseFeatureWrapper(object):
                 else:
                     dim = np_utils._dim(x)
                     self.save_feature(estimator.__name__(), obs_field, target_field, dim, x, y_train)
+                # Release memory between iterations. Not sure if necessary yet,
+                # but noticed some strange memory usage so trying this out
+                del obs_corpus
+                del obs_trans
+                del target_corpus
+                del target_trans
+                del x
 
     def save_feature(self, feat_name, obs_field, target_field, dim, x, y):
         fname = "%s_%s_x_%s_%dD" % (feat_name, obs_field, target_field, dim)
@@ -213,7 +238,7 @@ class NoopTransformer(object):
 
 
 # Could be more carefull .. but we will only open at
-# make 3 (currently) so whatever...
+# most 3 (currently) in read only so whatever...
 open_shelves = {}
 
 class ShelveLookupTransformer(object):
@@ -229,12 +254,20 @@ class ShelveLookupTransformer(object):
         return len(self.corpus)
 
     def __iter__(self):
-        for item in self.corpus:
-            yield self.data[str(item)][self.field]
+        for key in self.corpus:
+            if isinstance(key, unicode):
+                val = self.data[key.encode('utf8')]
+            else:
+                val = self.data[str(key)]
+            yield val if self.field is None else val[self.field]
 
     def __getitem__(self, i):
-        val = self.corpus[i]
-        return self.data[str(val)][self.field]
+        key = self.corpus[i]
+        if isinstance(val, unicode):
+            val = self.data[key.encode('utf8')]
+        else:
+            val = self.data[str(val)]
+        return val if self.field is None else val[self.field]
 
 
 class NoopDeduplicator(object):

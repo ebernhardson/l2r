@@ -5,9 +5,6 @@ import subprocess
 import config
 from utils import table_utils
 
-def dfRel():
-    return table_utils._read(config.RELEVANCE_DATA)
-
 def shelve_keys(fname):
     # This is pathological for spinning disks if the data isn't already in the
     # kernel disk cache, so try and pull it in
@@ -22,14 +19,15 @@ def main():
     # we would have NaN mixed in with the relevance scores,
     # and we can't train on those
     dfClicks = table_utils._read(config.CLICK_DATA)
-    dfAll = dfClicks \
-            .join(dfRel().set_index(['norm_query', 'hit_title']),
-                  on=['norm_query', 'hit_title'], how='inner')
+    dfRel = table_utils._read(config.RELEVANCE_DATA)
 
+    dfAll = dfClicks \
+            .join(dfRel.set_index(['norm_query', 'hit_title']),
+                  on=['norm_query', 'hit_title'], how='inner')
     dfClicks_len = len(dfClicks)
     rows_w_rel = len(dfAll)
     del dfClicks
-
+    del dfRel
 
     # Filter out pages that couldn't be loaded as docs/termvecs
     es_docs_keys = set(map(int, shelve_keys(config.ES_PAGE_DOCS_SHELVE)))
@@ -53,7 +51,7 @@ def main():
 
     table_utils._write(config.ALL_DATA, dfAll)
 
-    dfInfo = dfAll[["relevance"]].copy()
+    dfInfo = dfAll[["relevance", "weight"]].copy()
     table_utils._write(config.INFO_DATA, dfInfo)
 
     print 'Source clicks len: %d' % (dfClicks_len)
