@@ -263,10 +263,10 @@ class ShelveLookupTransformer(object):
 
     def __getitem__(self, i):
         key = self.corpus[i]
-        if isinstance(val, unicode):
+        if isinstance(key, unicode):
             val = self.data[key.encode('utf8')]
         else:
-            val = self.data[str(val)]
+            val = self.data[str(key)]
         return val if self.field is None else val[self.field]
 
 
@@ -300,7 +300,7 @@ class SingleFieldDeduplicator(object):
     def reduplicate(self, obs_corpus, target_corpus, x):
         # re-duplicate the values
         x_df = pd.DataFrame(zip(obs_corpus, x), columns=['src', 'est']).set_index(['src'])
-        # We need a list to ensure we get back a DataFrame and not a Series
+        # We need obs_field in a  list to ensure we get back a DataFrame and not a Series
         x_redup = self.dfAll[[self.obs_field]].join(x_df, on=[self.obs_field], how='left')['est'].values
         # This feels like a hack, but we have ended up with an ndarray of ndarray on
         # aggregations and need to fix it
