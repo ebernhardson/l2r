@@ -51,9 +51,17 @@ def main():
     dfAll = dfAll.groupby(map(str, dfAll.columns)).size().reset_index()
     dfAll.rename(columns={0: 'weight'}, inplace=True)
 
+    # Assign id's to all normalized queries, to be used to generate pairwise
+    # preferences for the ranking learners
+    norm_query_id_df = pd.DataFrame(list(enumerate(dfAll["norm_query"].unique())),
+                                    columns=["norm_query_id", "norm_query"])
+    dfAll = dfAll.join(norm_query_id_df.set_index("norm_query"), on="norm_query")
+    # xgboost requires the data to be in groups by id
+    dfAll.sort_values("norm_query_id", inplace=True)
+
     table_utils._write(config.ALL_DATA, dfAll)
 
-    dfInfo = dfAll[["relevance", "weight"]].copy()
+    dfInfo = dfAll[["relevance", "weight", "norm_query_id"]].copy()
     table_utils._write(config.INFO_DATA, dfInfo)
 
     print 'Source clicks len: %d' % (dfClicks_len)

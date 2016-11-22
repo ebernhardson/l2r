@@ -142,13 +142,13 @@ def _create_feature_conf(lsa_columns, outfile):
             pass
     res += "}\n"
 
-    with open(os.path.join(config.FEAT_CONF_DIR, outfile), "w") as f:
+    with open(os.path.join(config.FEAT_CONF_DIR, outfile + ".py"), "w") as f:
         f.write(res)
 
 def parse_args(parser):
     parser.add_option("-d", "--dim", default=1, type=int, dest="lsa_columns",
         help="lsa columns")
-    parser.add_option("-o", "--outfile", default="feature_conf_%s.py" % (time_utils._timestamp()),
+    parser.add_option("-o", "--outfile", default="feature_conf_%s" % (time_utils._timestamp()),
         type="string", dest="outfile", help="outfile")
     return parser.parse_args()
 

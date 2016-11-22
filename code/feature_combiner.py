@@ -73,7 +73,8 @@ class Combiner(object):
         dfAll.fillna(config.MISSING_VALUE_NUMERIC, inplace=True)
         self.y = dfAll["relevance"].values.astype(float)
         self.weights = dfAll['weight'].values
-        dfAll.drop(["relevance", "weight"], axis=1, inplace=True)
+        self.query_ids = dfAll['norm_query_id'].values
+        dfAll.drop(["relevance", "weight", "norm_query_id"], axis=1, inplace=True)
         self.X = dfAll.values.astype(float)
 
         self.logger.info("Overall Shape: %d x %d" % (len(self.y), self.X.shape[1]))
@@ -84,6 +85,7 @@ class Combiner(object):
             "X": self.X,
             "y": self.y,
             "weights": self.weights,
+            "query_ids": self.query_ids,
             "feature_names": self.feature_names,
         }
         fname = os.path.join(config.FEAT_DIR, 'Combine', self.feature_name + config.FEAT_FILE_SUFFIX)
