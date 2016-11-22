@@ -76,6 +76,11 @@ INFO_DATA = "%s/info.csv.pkl" % (CLEAN_DATA_DIR)
 
 FEAT_FILE_SUFFIX = ".pkl"
 
+# Remove the "wall" of results with relevance between 0.24 and 0.25. Not sure
+# yet if this is a great idea or not. These are mostly results that the
+# DBN doesn't think anyone even looked at
+REMOVE_WALL = True
+
 COUNT_TRANSFORM = np.log1p
 
 MISSING_VALUE_STRING = "MISSINGVALUE"

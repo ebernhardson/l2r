@@ -20,6 +20,8 @@ def main():
     # and we can't train on those
     dfClicks = table_utils._read(config.CLICK_DATA)
     dfRel = table_utils._read(config.RELEVANCE_DATA)
+    if config.REMOVE_WALL:
+        dfRel = dfRel[(dfRel['relevance'] < 0.24) | (dfRel['relevance'] > 0.25)]
 
     dfAll = dfClicks \
             .join(dfRel.set_index(['norm_query', 'hit_title']),
