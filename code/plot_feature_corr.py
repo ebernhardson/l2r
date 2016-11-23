@@ -24,7 +24,7 @@ def is_feat_log(fname):
 
 
 def grap_feat_line_corr(line):
-    pat = re.compile("corr=(.+)")
+    pat = re.compile("corr=(-?0\.\d+)")
     groups = re.findall(pat, line)
     if len(groups) > 0:
         return float(groups[0])

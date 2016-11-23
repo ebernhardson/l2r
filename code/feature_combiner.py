@@ -50,7 +50,7 @@ class Combiner(object):
             dim = np_utils._dim(x)
             if dim == 1:
                 corr = np_utils._corr(x, y)
-                if not mandatory and abs(corr) < self.corr_threshold:
+                if not mandatory and (np.isnan(corr) or abs(corr) < self.corr_threshold):
                     self.logger.info("Drop: {} ({}D) (abs_corr = {}, < threshold {})".format(
                         fname, dim, abs(corr), self.corr_threshold))
                     continue

@@ -221,7 +221,7 @@ class PairwiseFeatureWrapper(object):
         table_utils._write(os.path.join(self.feat_dir, fname + config.FEAT_FILE_SUFFIX), x)
         if dim == 1:
             corr = np_utils._corr(x, y)
-            self.logger.info("%s (%dD): corr = %.6f" % (fname, dim, corr))
+            self.logger.info("%s (%dD): corr=%.6f" % (fname, dim, corr))
 
 class NoopTransformer(object):
     def __init__(self, corpus):
